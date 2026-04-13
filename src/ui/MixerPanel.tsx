@@ -1,16 +1,21 @@
+import { useState } from 'react';
 import type { Track } from '../types/song';
+import type { InstrumentPreset } from '../types/synth';
 import type { TrackMixState } from '../types/transport';
 import { PresetSelector } from './PresetSelector';
+import { SynthControls } from './SynthControls';
 import { DRUM_CHANNEL } from '../utils/constants';
 
 export interface MixerPanelProps {
   tracks: Track[];
   trackMixStates: TrackMixState[];
   presetAssignments: Record<string, string>;
+  customPresets: Record<string, InstrumentPreset>;
   onTrackGain: (trackId: string, gain: number) => void;
   onTrackMute: (trackId: string, muted: boolean) => void;
   onTrackSolo: (trackId: string, solo: boolean) => void;
   onChangePreset: (trackId: string, presetId: string) => void;
+  onUpdatePreset: (trackId: string, preset: InstrumentPreset) => void;
   masterGain: number;
   onMasterGain: (gain: number) => void;
   collapsed: boolean;
@@ -21,6 +26,9 @@ const styles = {
   panel: {
     backgroundColor: '#16213e',
     borderTop: '1px solid #333',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    overflow: 'hidden',
   },
   header: {
     display: 'flex',
@@ -30,6 +38,7 @@ const styles = {
     cursor: 'pointer',
     userSelect: 'none' as const,
     borderBottom: '1px solid #333',
+    flexShrink: 0,
   },
   headerTitle: {
     color: '#e0e0e0',
@@ -46,9 +55,12 @@ const styles = {
     fontSize: '11px',
   },
   body: {
-    padding: '8px 16px',
-    maxHeight: '250px',
+    padding: '8px 12px',
     overflowY: 'auto' as const,
+    flex: 1,
+  },
+  trackBlock: {
+    marginBottom: '2px',
   },
   trackRow: {
     display: 'flex',
@@ -56,7 +68,6 @@ const styles = {
     gap: '6px',
     padding: '4px 0',
     borderBottom: '1px solid #222',
-    flexWrap: 'wrap' as const,
   },
   trackName: {
     color: '#e0e0e0',
@@ -66,6 +77,7 @@ const styles = {
     textOverflow: 'ellipsis' as const,
     whiteSpace: 'nowrap' as const,
     flexShrink: 0,
+    cursor: 'pointer',
   },
   slider: {
     accentColor: '#4a9eff',
@@ -111,6 +123,20 @@ const styles = {
     backgroundColor: '#0f3460',
     color: '#e0e0e0',
   },
+  expandBtn: {
+    backgroundColor: 'transparent',
+    color: '#666',
+    border: '1px solid #333',
+    borderRadius: '3px',
+    padding: '1px 5px',
+    cursor: 'pointer',
+    fontSize: '9px',
+    flexShrink: 0,
+  },
+  expandBtnActive: {
+    color: '#4a9eff',
+    borderColor: '#4a9eff',
+  },
   masterRow: {
     display: 'flex',
     alignItems: 'center',
@@ -123,7 +149,7 @@ const styles = {
     color: '#4a9eff',
     fontSize: '12px',
     fontWeight: 600 as const,
-    width: '120px',
+    width: '80px',
     flexShrink: 0,
   },
 } as const;
@@ -132,15 +158,19 @@ export function MixerPanel({
   tracks,
   trackMixStates,
   presetAssignments,
+  customPresets,
   onTrackGain,
   onTrackMute,
   onTrackSolo,
   onChangePreset,
+  onUpdatePreset,
   masterGain,
   onMasterGain,
   collapsed,
   onToggleCollapse,
 }: MixerPanelProps) {
+  const [expandedTrack, setExpandedTrack] = useState<string | null>(null);
+
   return (
     <div style={styles.panel}>
       <div style={styles.header} onClick={onToggleCollapse}>
@@ -164,55 +194,81 @@ export function MixerPanel({
 
             const isDrum = track.channel === DRUM_CHANNEL;
             const currentPresetId = presetAssignments[track.id] ?? track.instrumentPresetId;
+            const isExpanded = expandedTrack === track.id;
+            const preset = customPresets[track.id];
 
             return (
-              <div key={track.id} style={styles.trackRow}>
-                <span style={styles.trackName} title={track.name}>
-                  {track.name}
-                </span>
-                {!isDrum && (
-                  <PresetSelector
-                    currentPresetId={currentPresetId}
-                    onChange={(presetId) => onChangePreset(track.id, presetId)}
+              <div key={track.id} style={styles.trackBlock}>
+                <div style={styles.trackRow}>
+                  <span
+                    style={styles.trackName}
+                    title={`${track.name} — click to ${isExpanded ? 'collapse' : 'expand'} synth controls`}
+                    onClick={() => setExpandedTrack(isExpanded ? null : track.id)}
+                  >
+                    {track.name}
+                  </span>
+                  {!isDrum && (
+                    <PresetSelector
+                      currentPresetId={currentPresetId}
+                      onChange={(presetId) => onChangePreset(track.id, presetId)}
+                    />
+                  )}
+                  {isDrum && (
+                    <span style={{ color: '#666', fontSize: '11px', width: '130px', flexShrink: 0 }}>
+                      Drums (GM)
+                    </span>
+                  )}
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={mixState.gain}
+                    onChange={(e) => onTrackGain(track.id, parseFloat(e.target.value))}
+                    style={styles.slider}
+                  />
+                  <span style={styles.gainLabel}>
+                    {Math.round(mixState.gain * 100)}%
+                  </span>
+                  <button
+                    style={{
+                      ...styles.toggleButton,
+                      ...(mixState.muted ? styles.muteActive : styles.muteInactive),
+                    }}
+                    onClick={() => onTrackMute(track.id, !mixState.muted)}
+                    title="Mute"
+                  >
+                    M
+                  </button>
+                  <button
+                    style={{
+                      ...styles.toggleButton,
+                      ...(mixState.solo ? styles.soloActive : styles.soloInactive),
+                    }}
+                    onClick={() => onTrackSolo(track.id, !mixState.solo)}
+                    title="Solo"
+                  >
+                    S
+                  </button>
+                  {!isDrum && (
+                    <button
+                      style={{
+                        ...styles.expandBtn,
+                        ...(isExpanded ? styles.expandBtnActive : {}),
+                      }}
+                      onClick={() => setExpandedTrack(isExpanded ? null : track.id)}
+                      title="Synth controls"
+                    >
+                      {isExpanded ? '\u25B2' : '\u25BC'}
+                    </button>
+                  )}
+                </div>
+                {isExpanded && !isDrum && preset && (
+                  <SynthControls
+                    preset={preset}
+                    onChange={(p) => onUpdatePreset(track.id, p)}
                   />
                 )}
-                {isDrum && (
-                  <span style={{ color: '#666', fontSize: '11px', width: '130px', flexShrink: 0 }}>
-                    Drums (GM)
-                  </span>
-                )}
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  value={mixState.gain}
-                  onChange={(e) => onTrackGain(track.id, parseFloat(e.target.value))}
-                  style={styles.slider}
-                />
-                <span style={styles.gainLabel}>
-                  {Math.round(mixState.gain * 100)}%
-                </span>
-                <button
-                  style={{
-                    ...styles.toggleButton,
-                    ...(mixState.muted ? styles.muteActive : styles.muteInactive),
-                  }}
-                  onClick={() => onTrackMute(track.id, !mixState.muted)}
-                  title="Mute"
-                >
-                  M
-                </button>
-                <button
-                  style={{
-                    ...styles.toggleButton,
-                    ...(mixState.solo ? styles.soloActive : styles.soloInactive),
-                  }}
-                  onClick={() => onTrackSolo(track.id, !mixState.solo)}
-                  title="Solo"
-                >
-                  S
-                </button>
               </div>
             );
           })}
