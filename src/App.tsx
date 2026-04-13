@@ -68,11 +68,23 @@ function App() {
 
   const currentBarIndex = useMemo(() => {
     if (!song || song.tracks.length === 0) return 0;
-    const track = song.tracks[0];
-    for (let i = track.bars.length - 1; i >= 0; i--) {
-      if (transport.currentTick >= track.bars[i].startTick) return i;
+    const bars = song.tracks[0].bars;
+    if (bars.length === 0) return 0;
+    // Binary search for the bar containing currentTick
+    let lo = 0;
+    let hi = bars.length - 1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >>> 1;
+      if (transport.currentTick < bars[mid].startTick) {
+        hi = mid - 1;
+      } else if (transport.currentTick >= bars[mid].endTick) {
+        lo = mid + 1;
+      } else {
+        return mid;
+      }
     }
-    return 0;
+    // Clamp to last bar if past end
+    return Math.min(lo, bars.length - 1);
   }, [song, transport.currentTick]);
 
   const handlePlay = async () => {
