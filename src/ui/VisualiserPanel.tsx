@@ -102,8 +102,10 @@ export function VisualiserPanel({
     }
 
     const fftSize = analyserNode.fftSize;
+    const binCount = analyserNode.frequencyBinCount;
     const timeDomainData = new Float32Array(fftSize);
-    const frequencyData = new Float32Array(analyserNode.frequencyBinCount);
+    const frequencyData = new Float32Array(binCount);
+    const normalizedFreq = new Float32Array(binCount); // pre-allocated
 
     let disposed = false;
 
@@ -116,8 +118,7 @@ export function VisualiserPanel({
       analyserNode.getFloatFrequencyData(frequencyData);
 
       // Normalise frequency data from dB range [-100, 0] to [0, 1]
-      const normalizedFreq = new Float32Array(frequencyData.length);
-      for (let i = 0; i < frequencyData.length; i++) {
+      for (let i = 0; i < binCount; i++) {
         normalizedFreq[i] = Math.max(0, Math.min(1, (frequencyData[i] + 100) / 100));
       }
 

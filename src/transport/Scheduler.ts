@@ -1,7 +1,7 @@
 import type { Song, Bar } from '../types/song';
 import type { InstrumentEngine } from '../types/synth';
 import type { TransportConfig } from '../types/transport';
-import { tickToSeconds } from '../midi/utils';
+import { tickToSeconds, secondsToTick } from '../midi/utils';
 
 /** Interval in ms between scheduling passes. */
 const SCHEDULER_INTERVAL_MS = 25;
@@ -175,22 +175,15 @@ export class Scheduler {
   }
 
   /**
-   * Inverse of tickToScaledSeconds using binary search.
+   * Inverse of tickToScaledSeconds — convert scaled seconds back to a tick.
+   * Uses secondsToTick (O(tempoMap.length)) instead of a binary search
+   * that was calling tickToSeconds at every step (O(log(maxTick) * tempoMap.length)).
    */
   private scaledSecondsToTick(targetSeconds: number): number {
     if (!this.song) return 0;
-    const maxTick = this.song.meta.durationTicks;
-    let lo = 0;
-    let hi = maxTick;
-    while (lo < hi) {
-      const mid = (lo + hi) >>> 1;
-      if (this.tickToScaledSeconds(mid) < targetSeconds) {
-        lo = mid + 1;
-      } else {
-        hi = mid;
-      }
-    }
-    return lo;
+    // scaledSeconds = rawSeconds / tempoScale, so rawSeconds = scaledSeconds * tempoScale
+    const rawSeconds = targetSeconds * this.config.tempoScale;
+    return secondsToTick(rawSeconds, this.song.tempoMap, this.song.meta.ppq);
   }
 
   /**

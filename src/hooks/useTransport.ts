@@ -80,8 +80,23 @@ export function useTransport(
       setState(newState);
     };
 
+    // Throttle tick updates to animation-frame rate instead of every 25ms
+    // scheduler pass. The scheduler fires at 40Hz but React re-renders are
+    // expensive — batching to rAF (~60Hz cap, but only one render per
+    // frame) prevents the entire component tree from thrashing.
+    let pendingTick: number | null = null;
+    let rafId = 0;
     transport.onTickUpdate = (tick: number) => {
-      setCurrentTick(tick);
+      pendingTick = tick;
+      if (!rafId) {
+        rafId = requestAnimationFrame(() => {
+          if (pendingTick !== null) {
+            setCurrentTick(pendingTick);
+            pendingTick = null;
+          }
+          rafId = 0;
+        });
+      }
     };
 
     transportRef.current = transport;
@@ -91,6 +106,7 @@ export function useTransport(
     setAnalyserNode(mixer.getAnalyserNode());
 
     return () => {
+      cancelAnimationFrame(rafId);
       transport.dispose();
       mixer.dispose();
       disposeEngines();

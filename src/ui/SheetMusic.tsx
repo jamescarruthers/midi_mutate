@@ -71,6 +71,13 @@ export function SheetMusic({
   const rafRef = useRef<number>(0);
   const [autoScrollLocal, setAutoScrollLocal] = useState(autoScrollProp);
 
+  // Store volatile playback values in refs so the rAF loop reads them
+  // without causing the effect to restart.
+  const currentTickRef = useRef(currentTick);
+  const currentBarIndexRef = useRef(currentBarIndex);
+  currentTickRef.current = currentTick;
+  currentBarIndexRef.current = currentBarIndex;
+
   // Create renderer when canvas mounts
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -95,7 +102,8 @@ export function SheetMusic({
     canvas.height = totalHeight;
   }, [song]);
 
-  // Animation loop
+  // Animation loop — runs continuously while a song is loaded, reads
+  // tick/bar from refs so it never tears down on playback updates.
   useEffect(() => {
     if (!song) return;
 
@@ -106,7 +114,7 @@ export function SheetMusic({
       if (!canvas || !container || !renderer) return;
 
       const scrollX = container.scrollLeft;
-      renderer.render(song, scrollX, currentTick, currentBarIndex);
+      renderer.render(song, scrollX, currentTickRef.current, currentBarIndexRef.current);
       rafRef.current = requestAnimationFrame(animate);
     };
 
@@ -114,7 +122,7 @@ export function SheetMusic({
     return () => {
       cancelAnimationFrame(rafRef.current);
     };
-  }, [song, currentTick, currentBarIndex]);
+  }, [song]);
 
   // Auto-scroll to keep current bar visible
   useEffect(() => {
