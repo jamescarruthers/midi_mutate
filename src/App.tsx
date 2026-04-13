@@ -30,9 +30,11 @@ const styles = {
   bottomPanel: {
     display: 'grid',
     gridTemplateColumns: '280px 1fr',
-    height: '200px',
+    height: '220px',
     minHeight: '150px',
+    maxHeight: '50vh',
     borderTop: '1px solid #333',
+    overflow: 'hidden',
   } as React.CSSProperties,
   errorBanner: {
     background: '#5c1a1a',
@@ -138,14 +140,18 @@ function App() {
 
       <div style={{
         ...styles.bottomPanel,
-        gridTemplateColumns: mixerCollapsed ? '40px 1fr' : '280px 1fr',
+        gridTemplateColumns: mixerCollapsed ? '40px 1fr' : '1fr 1fr',
       }}>
         <MixerPanel
           tracks={song?.tracks ?? []}
           trackMixStates={transport.trackMixStates}
+          presetAssignments={transport.presetAssignments}
+          customPresets={transport.customPresets}
           onTrackGain={transport.setTrackGain}
           onTrackMute={transport.setTrackMute}
           onTrackSolo={transport.setTrackSolo}
+          onChangePreset={transport.changePreset}
+          onUpdatePreset={transport.updateTrackPreset}
           masterGain={transport.masterGain}
           onMasterGain={transport.setMasterGain}
           collapsed={mixerCollapsed}

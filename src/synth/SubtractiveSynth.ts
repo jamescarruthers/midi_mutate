@@ -110,6 +110,16 @@ export class SubtractiveSynth implements InstrumentEngine {
     this.destination = destination;
   }
 
+  /** Update the preset used for future noteOn calls. Active voices are unaffected. */
+  updatePreset(preset: InstrumentPreset): void {
+    this.preset = preset;
+  }
+
+  /** Return a deep copy of the current preset. */
+  getPreset(): InstrumentPreset {
+    return JSON.parse(JSON.stringify(this.preset));
+  }
+
   noteOn(pitch: number, velocity: number, time: number): void {
     if (this.disposed) return;
 

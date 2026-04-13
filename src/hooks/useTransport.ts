@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import type { Song } from '../types/song';
-import type { InstrumentEngine } from '../types/synth';
+import type { InstrumentEngine, InstrumentPreset } from '../types/synth';
 import type { TransportState, TrackMixState } from '../types/transport';
 import { Transport } from '../transport/Transport';
 import { Mixer } from '../transport/Mixer';
@@ -29,7 +29,10 @@ export interface UseTransportReturn {
   masterGain: number;
   setMasterGain: (gain: number) => void;
   analyserNode: AnalyserNode | null;
+  presetAssignments: Record<string, string>;
+  customPresets: Record<string, InstrumentPreset>;
   changePreset: (trackId: string, presetId: string) => void;
+  updateTrackPreset: (trackId: string, preset: InstrumentPreset) => void;
 }
 
 /**
@@ -66,6 +69,8 @@ export function useTransport(
   const [trackMixStates, setTrackMixStates] = useState<TrackMixState[]>([]);
   const [masterGain, setMasterGainState] = useState(1);
   const [analyserNode, setAnalyserNode] = useState<AnalyserNode | null>(null);
+  const [presetAssignments, setPresetAssignments] = useState<Record<string, string>>({});
+  const [customPresets, setCustomPresets] = useState<Record<string, InstrumentPreset>>({});
 
   // -----------------------------------------------------------------------
   // Create / tear down Transport + Mixer when audioContext changes
@@ -164,6 +169,21 @@ export function useTransport(
       solo: false,
     }));
     setTrackMixStates(initialMix);
+
+    // Build initial preset assignments from song tracks.
+    const initialPresets: Record<string, string> = {};
+    for (const track of song.tracks) {
+      initialPresets[track.id] = track.instrumentPresetId;
+    }
+    setPresetAssignments(initialPresets);
+
+    // Build initial custom presets (deep copies of the factory presets).
+    const initialCustom: Record<string, InstrumentPreset> = {};
+    for (const track of song.tracks) {
+      const p = PRESETS[track.instrumentPresetId] ?? PRESETS[DEFAULT_PRESET_ID];
+      initialCustom[track.id] = JSON.parse(JSON.stringify(p));
+    }
+    setCustomPresets(initialCustom);
 
     // Reset playback-related state for the new song.
     setState('stopped');
@@ -291,8 +311,31 @@ export function useTransport(
       // Reload the song into transport with the updated engines map so that
       // subsequent play() calls use the new engine.
       transport.loadSong(song, enginesRef.current);
+
+      // Update preset assignments state and reset custom preset.
+      setPresetAssignments((prev) => ({ ...prev, [trackId]: presetId }));
+      const freshPreset = PRESETS[presetId] ?? PRESETS[DEFAULT_PRESET_ID];
+      setCustomPresets((prev) => ({
+        ...prev,
+        [trackId]: JSON.parse(JSON.stringify(freshPreset)),
+      }));
     },
     [audioContext, song],
+  );
+
+  // -----------------------------------------------------------------------
+  // Live preset parameter tweaking
+  // -----------------------------------------------------------------------
+
+  const updateTrackPreset = useCallback(
+    (trackId: string, preset: InstrumentPreset) => {
+      const engine = enginesRef.current.get(trackId);
+      if (engine && 'updatePreset' in engine) {
+        (engine as SubtractiveSynth).updatePreset(preset);
+      }
+      setCustomPresets((prev) => ({ ...prev, [trackId]: preset }));
+    },
+    [],
   );
 
   // -----------------------------------------------------------------------
@@ -319,6 +362,9 @@ export function useTransport(
     masterGain,
     setMasterGain,
     analyserNode,
+    presetAssignments,
+    customPresets,
     changePreset,
+    updateTrackPreset,
   };
 }
