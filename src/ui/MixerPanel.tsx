@@ -1,12 +1,16 @@
 import type { Track } from '../types/song';
 import type { TrackMixState } from '../types/transport';
+import { PresetSelector } from './PresetSelector';
+import { DRUM_CHANNEL } from '../utils/constants';
 
 export interface MixerPanelProps {
   tracks: Track[];
   trackMixStates: TrackMixState[];
+  presetAssignments: Record<string, string>;
   onTrackGain: (trackId: string, gain: number) => void;
   onTrackMute: (trackId: string, muted: boolean) => void;
   onTrackSolo: (trackId: string, solo: boolean) => void;
+  onChangePreset: (trackId: string, presetId: string) => void;
   masterGain: number;
   onMasterGain: (gain: number) => void;
   collapsed: boolean;
@@ -49,14 +53,15 @@ const styles = {
   trackRow: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
+    gap: '6px',
     padding: '4px 0',
     borderBottom: '1px solid #222',
+    flexWrap: 'wrap' as const,
   },
   trackName: {
     color: '#e0e0e0',
     fontSize: '12px',
-    width: '120px',
+    width: '80px',
     overflow: 'hidden' as const,
     textOverflow: 'ellipsis' as const,
     whiteSpace: 'nowrap' as const,
@@ -65,7 +70,7 @@ const styles = {
   slider: {
     accentColor: '#4a9eff',
     cursor: 'pointer',
-    width: '100px',
+    width: '60px',
     height: '4px',
   },
   gainLabel: {
@@ -126,9 +131,11 @@ const styles = {
 export function MixerPanel({
   tracks,
   trackMixStates,
+  presetAssignments,
   onTrackGain,
   onTrackMute,
   onTrackSolo,
+  onChangePreset,
   masterGain,
   onMasterGain,
   collapsed,
@@ -155,11 +162,25 @@ export function MixerPanel({
             const mixState = trackMixStates.find((m) => m.trackId === track.id);
             if (!mixState) return null;
 
+            const isDrum = track.channel === DRUM_CHANNEL;
+            const currentPresetId = presetAssignments[track.id] ?? track.instrumentPresetId;
+
             return (
               <div key={track.id} style={styles.trackRow}>
                 <span style={styles.trackName} title={track.name}>
                   {track.name}
                 </span>
+                {!isDrum && (
+                  <PresetSelector
+                    currentPresetId={currentPresetId}
+                    onChange={(presetId) => onChangePreset(track.id, presetId)}
+                  />
+                )}
+                {isDrum && (
+                  <span style={{ color: '#666', fontSize: '11px', width: '130px', flexShrink: 0 }}>
+                    Drums (GM)
+                  </span>
+                )}
                 <input
                   type="range"
                   min={0}

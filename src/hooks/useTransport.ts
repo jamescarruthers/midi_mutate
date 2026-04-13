@@ -29,6 +29,7 @@ export interface UseTransportReturn {
   masterGain: number;
   setMasterGain: (gain: number) => void;
   analyserNode: AnalyserNode | null;
+  presetAssignments: Record<string, string>;
   changePreset: (trackId: string, presetId: string) => void;
 }
 
@@ -66,6 +67,7 @@ export function useTransport(
   const [trackMixStates, setTrackMixStates] = useState<TrackMixState[]>([]);
   const [masterGain, setMasterGainState] = useState(1);
   const [analyserNode, setAnalyserNode] = useState<AnalyserNode | null>(null);
+  const [presetAssignments, setPresetAssignments] = useState<Record<string, string>>({});
 
   // -----------------------------------------------------------------------
   // Create / tear down Transport + Mixer when audioContext changes
@@ -164,6 +166,13 @@ export function useTransport(
       solo: false,
     }));
     setTrackMixStates(initialMix);
+
+    // Build initial preset assignments from song tracks.
+    const initialPresets: Record<string, string> = {};
+    for (const track of song.tracks) {
+      initialPresets[track.id] = track.instrumentPresetId;
+    }
+    setPresetAssignments(initialPresets);
 
     // Reset playback-related state for the new song.
     setState('stopped');
@@ -291,6 +300,9 @@ export function useTransport(
       // Reload the song into transport with the updated engines map so that
       // subsequent play() calls use the new engine.
       transport.loadSong(song, enginesRef.current);
+
+      // Update preset assignments state.
+      setPresetAssignments((prev) => ({ ...prev, [trackId]: presetId }));
     },
     [audioContext, song],
   );
@@ -319,6 +331,7 @@ export function useTransport(
     masterGain,
     setMasterGain,
     analyserNode,
+    presetAssignments,
     changePreset,
   };
 }

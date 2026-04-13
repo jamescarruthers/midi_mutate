@@ -143,9 +143,11 @@ function App() {
         <MixerPanel
           tracks={song?.tracks ?? []}
           trackMixStates={transport.trackMixStates}
+          presetAssignments={transport.presetAssignments}
           onTrackGain={transport.setTrackGain}
           onTrackMute={transport.setTrackMute}
           onTrackSolo={transport.setTrackSolo}
+          onChangePreset={transport.changePreset}
           masterGain={transport.masterGain}
           onMasterGain={transport.setMasterGain}
           collapsed={mixerCollapsed}
