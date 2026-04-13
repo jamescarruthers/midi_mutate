@@ -14,16 +14,36 @@ export interface SheetMusicProps {
 const styles = {
   wrapper: {
     position: 'relative' as const,
+    width: '100%',
+    height: '100%',
     backgroundColor: '#1a1a2e',
-    borderBottom: '1px solid #333',
   },
   container: {
+    width: '100%',
+    height: '100%',
     overflowX: 'auto' as const,
     overflowY: 'auto' as const,
-    maxHeight: '60vh',
+  },
+  // Invisible spacer inside the scroll container — its width drives
+  // the scrollbar range while the canvas stays viewport-sized.
+  spacer: {
+    pointerEvents: 'none' as const,
+    height: '1px',
   },
   canvas: {
     display: 'block' as const,
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    pointerEvents: 'none' as const,
+  },
+  // Transparent overlay on top of the canvas to capture clicks
+  clickOverlay: {
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
   },
   autoScrollToggle: {
     position: 'absolute' as const,
@@ -65,14 +85,14 @@ export function SheetMusic({
   onSeekToBar,
   autoScroll: autoScrollProp,
 }: SheetMusicProps) {
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<SheetMusicRenderer | null>(null);
   const rafRef = useRef<number>(0);
   const [autoScrollLocal, setAutoScrollLocal] = useState(autoScrollProp);
 
-  // Store volatile playback values in refs so the rAF loop reads them
-  // without causing the effect to restart.
+  // Volatile playback values in refs — read by rAF, not useEffect deps.
   const currentTickRef = useRef(currentTick);
   const currentBarIndexRef = useRef(currentBarIndex);
   currentTickRef.current = currentTick;
@@ -83,27 +103,28 @@ export function SheetMusic({
     const canvas = canvasRef.current;
     if (!canvas) return;
     rendererRef.current = new SheetMusicRenderer(canvas);
-    return () => {
-      rendererRef.current = null;
-    };
+    return () => { rendererRef.current = null; };
   }, []);
 
-  // Resize canvas to fit song content
+  // Resize canvas to match the wrapper (viewport), not the song.
   useEffect(() => {
+    const wrapper = wrapperRef.current;
     const canvas = canvasRef.current;
-    if (!canvas || !song) return;
+    if (!wrapper || !canvas) return;
 
-    const renderer = rendererRef.current;
-    if (!renderer) return;
+    const obs = new ResizeObserver((entries) => {
+      const { width, height } = entries[0].contentRect;
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+    });
+    obs.observe(wrapper);
+    return () => obs.disconnect();
+  }, []);
 
-    const totalWidth = renderer.getTotalWidth(song);
-    const totalHeight = song.tracks.length * (STAFF_HEIGHT + TRACK_PADDING);
-    canvas.width = totalWidth;
-    canvas.height = totalHeight;
-  }, [song]);
-
-  // Animation loop — runs continuously while a song is loaded, reads
-  // tick/bar from refs so it never tears down on playback updates.
+  // Animation loop — continuous while song is loaded.
   useEffect(() => {
     if (!song) return;
 
@@ -111,17 +132,19 @@ export function SheetMusic({
       const canvas = canvasRef.current;
       const container = containerRef.current;
       const renderer = rendererRef.current;
-      if (!canvas || !container || !renderer) return;
+      if (!canvas || !container || !renderer) {
+        rafRef.current = requestAnimationFrame(animate);
+        return;
+      }
 
       const scrollX = container.scrollLeft;
-      renderer.render(song, scrollX, currentTickRef.current, currentBarIndexRef.current);
+      const dpr = window.devicePixelRatio || 1;
+      renderer.render(song, scrollX, currentTickRef.current, currentBarIndexRef.current, dpr);
       rafRef.current = requestAnimationFrame(animate);
     };
 
     rafRef.current = requestAnimationFrame(animate);
-    return () => {
-      cancelAnimationFrame(rafRef.current);
-    };
+    return () => cancelAnimationFrame(rafRef.current);
   }, [song]);
 
   // Auto-scroll to keep current bar visible
@@ -134,21 +157,19 @@ export function SheetMusic({
     const viewLeft = container.scrollLeft;
     const viewRight = viewLeft + container.clientWidth;
 
-    // Scroll if the current bar is not fully visible
     if (barX < viewLeft + HEADER_WIDTH || barX + BAR_WIDTH > viewRight) {
       container.scrollLeft = Math.max(0, barX - HEADER_WIDTH - 50);
     }
   }, [currentBarIndex, autoScrollLocal, song]);
 
-  // Click handler
+  // Click handler on the overlay div
   const handleClick = useCallback(
-    (e: React.MouseEvent<HTMLCanvasElement>) => {
-      const canvas = canvasRef.current;
+    (e: React.MouseEvent<HTMLDivElement>) => {
       const container = containerRef.current;
       const renderer = rendererRef.current;
-      if (!canvas || !container || !renderer || !song) return;
+      if (!container || !renderer || !song) return;
 
-      const rect = canvas.getBoundingClientRect();
+      const rect = container.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const scrollX = container.scrollLeft;
       const barIndex = renderer.getBarAtX(x, scrollX);
@@ -171,15 +192,21 @@ export function SheetMusic({
     );
   }
 
+  // Total scrollable width
+  const maxBars = Math.max(...song.tracks.map((t) => t.bars.length), 0);
+  const totalWidth = HEADER_WIDTH + maxBars * BAR_WIDTH;
+  const totalHeight = song.tracks.length * (STAFF_HEIGHT + TRACK_PADDING);
+
   return (
-    <div style={styles.wrapper}>
+    <div ref={wrapperRef} style={styles.wrapper}>
       <div ref={containerRef} style={styles.container}>
-        <canvas
-          ref={canvasRef}
-          style={styles.canvas}
-          onClick={handleClick}
-        />
+        {/* Spacer to create the scrollbar range */}
+        <div style={{ ...styles.spacer, width: totalWidth, minHeight: totalHeight }} />
       </div>
+      {/* Canvas is viewport-sized, positioned on top */}
+      <canvas ref={canvasRef} style={styles.canvas} />
+      {/* Click overlay */}
+      <div style={styles.clickOverlay} onClick={handleClick} />
       <div style={styles.autoScrollToggle}>
         <label style={styles.label}>
           <input
